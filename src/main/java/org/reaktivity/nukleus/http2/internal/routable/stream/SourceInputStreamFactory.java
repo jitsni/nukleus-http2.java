@@ -942,6 +942,17 @@ public final class SourceInputStreamFactory
 
             stream.contentLength = headersContext.contentLength;
 
+            // If there is no content-length header, inject transfer-encoding: chunked
+            // TODO do this only for POST and PUT methods ??
+            if (stream.contentLength == -1)
+            {
+                DirectBuffer name = decodeContext.nameBuffer(57);       // transfer-encoding
+                DirectBuffer value = decodeContext.CHUNKED;
+                httpBeginExRW.headers(b -> b.item(item -> item.representation((byte) 0)
+                                                              .name(name, 0, name.capacity())
+                                                              .value(value, 0, value.capacity())));
+            }
+
             HttpBeginExFW beginEx = httpBeginExRW.build();
             newTarget.doHttpBegin(stream.targetId, targetRef, stream.targetId, beginEx.buffer(), beginEx.offset(),
                     beginEx.sizeof());
