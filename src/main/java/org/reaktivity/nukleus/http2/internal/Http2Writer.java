@@ -15,6 +15,8 @@
  */
 package org.reaktivity.nukleus.http2.internal;
 
+import java.util.function.BiConsumer;
+
 import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
 import org.reaktivity.nukleus.function.MessageConsumer;
@@ -35,8 +37,6 @@ import org.reaktivity.nukleus.http2.internal.types.stream.Http2RstStreamFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.Http2SettingsFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.Http2WindowUpdateFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.ResetFW;
-
-import java.util.function.BiConsumer;
 
 class Http2Writer
 {
@@ -64,6 +64,7 @@ class Http2Writer
     void doData(
             MessageConsumer target,
             long targetId,
+            int padding,
             MutableDirectBuffer payload,
             int offset,
             int length)
@@ -73,6 +74,8 @@ class Http2Writer
 
         DataFW data = dataRW.wrap(payload, offset - DataFW.FIELD_OFFSET_PAYLOAD, offset + length)
                             .streamId(targetId)
+                            .groupId(0)
+                            .padding(padding)
                             .payload(p -> p.set((b, o, l) -> length))
                             .build();
 

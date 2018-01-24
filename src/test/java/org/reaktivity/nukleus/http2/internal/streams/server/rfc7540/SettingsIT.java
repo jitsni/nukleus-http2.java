@@ -13,9 +13,8 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package org.reaktivity.nukleus.http2.internal.streams.client.rfc7540;
+package org.reaktivity.nukleus.http2.internal.streams.server.rfc7540;
 
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.DisableOnDebug;
@@ -28,13 +27,12 @@ import org.reaktivity.reaktor.test.ReaktorRule;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.rules.RuleChain.outerRule;
 
-@Ignore
-public class FlowControlIT
+public class SettingsIT
 {
     private final K3poRule k3po = new K3poRule()
             .addScriptRoot("route", "org/reaktivity/specification/nukleus/http2/control/route")
-            .addScriptRoot("spec", "org/reaktivity/specification/http2/rfc7540/flow.control")
-            .addScriptRoot("nukleus", "org/reaktivity/specification/nukleus/http2/streams/rfc7540/flow.control");
+            .addScriptRoot("spec", "org/reaktivity/specification/http2/rfc7540/settings")
+            .addScriptRoot("nukleus", "org/reaktivity/specification/nukleus/http2/streams/rfc7540/connection.management");
 
     private final TestRule timeout = new DisableOnDebug(new Timeout(10, SECONDS));
 
@@ -44,6 +42,7 @@ public class FlowControlIT
             .responseBufferCapacity(1024)
             .counterValuesBufferCapacity(1024)
             .nukleus("http2"::equals)
+            .configure("nukleus.http2.server.concurrent.streams", 250)
             .clean();
 
     @Rule
@@ -51,10 +50,9 @@ public class FlowControlIT
 
     @Test
     @Specification({
-            "${route}/client/controller",
-            "${nukleus}/stream.flow.client/client",
-            "${spec}/stream.flow.client/server" })
-    public void streamFlow() throws Exception
+            "${route}/server/controller",
+            "${spec}/max.concurrent.streams/client" })
+    public void maxConcurrentStreams() throws Exception
     {
         k3po.finish();
     }

@@ -32,11 +32,12 @@ class Http2Stream
     final Http2Connection connection;
     final HttpWriteScheduler httpWriteScheduler;
     final int http2StreamId;
+    final int maxHeaderSize;
     final long targetId;
     final long correlationId;
     Http2ConnectionState state;
     long http2OutWindow;
-    long httpOutWindow;
+    long applicationReplyBudget;
     long http2InWindow;
 
     long contentLength;
@@ -66,6 +67,15 @@ class Http2Stream
         this.http2OutWindow = connection.remoteSettings.initialWindowSize;
         this.state = state;
         this.httpWriteScheduler = new HttpWriteScheduler(factory.httpWriterPool, applicationTarget, httpWriter, targetId, this);
+        // Setting the overhead to zero for now. Doesn't help when multiple streams are in picture
+        this.maxHeaderSize = 0;     // maxHeaderSize();
+    }
+
+    // Estimate only - no of DATA frames + WINDOW frames
+    private int maxHeaderSize()
+    {
+        int frameCount = (int) Math.ceil(factory.bufferPool.slotCapacity()/connection.remoteSettings.maxFrameSize) + 10;
+        return frameCount * 9;
     }
 
     boolean isClientInitiated()
@@ -175,20 +185,9 @@ class Http2Stream
                     factory.windowRO.wrap(buffer, index, index + length);
                     int credit = factory.windowRO.credit();
                     int padding = factory.windowRO.padding();
+                    long groupId = factory.windowRO.groupId();
 
-                    httpWriteScheduler.onWindow(credit, padding);
-
-                    if (credit > 0)
-                    {
-                        // HTTP2 connection-level flow-control
-                        connection.writeScheduler.windowUpdate(0, credit);
-
-                        // HTTP2 stream-level flow-control
-                        connection.writeScheduler.windowUpdate(http2StreamId, credit);
-                    }
-
-                    http2InWindow += credit;
-                    connection.http2InWindow += credit;
+                    httpWriteScheduler.onWindow(credit, padding, groupId);
                 }
                 break;
             case ResetFW.TYPE_ID:
@@ -236,14 +235,16 @@ class Http2Stream
 
     void sendHttpWindow()
     {
-        long maxWindow = Math.min(http2OutWindow, connection.factory.bufferPool.slotCapacity());
-        // target already has stream.httpOutWindow, calculate how much more it can send
-        long windowDelta = maxWindow - httpOutWindow;
-        if (windowDelta > 0)
+        // buffer may already have some data, so can only send window for remaining
+        int occupied = replyBuffer == null ? 0 : replyBuffer.size();
+        long maxWindow = Math.min(http2OutWindow, connection.factory.bufferPool.slotCapacity() - occupied);
+        long applicationReplyCredit = maxWindow - applicationReplyBudget;
+        if (applicationReplyCredit > 0)
         {
+            applicationReplyBudget += applicationReplyCredit;
+            int applicationReplyPadding = connection.networkReplyPadding + maxHeaderSize;
             connection.factory.doWindow(applicationReplyThrottle, applicationReplyId,
-                    (int) windowDelta, connection.outWindowPadding);
-            httpOutWindow += windowDelta;
+                    (int) applicationReplyCredit, applicationReplyPadding, connection.networkReplyGroupId);
         }
     }
 }

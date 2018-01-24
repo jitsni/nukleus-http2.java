@@ -15,6 +15,8 @@
  */
 package org.reaktivity.nukleus.http2.internal.client;
 
+import java.util.function.IntUnaryOperator;
+import java.util.function.LongFunction;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
@@ -81,6 +83,18 @@ public final class ClientStreamFactoryBuilder implements StreamFactoryBuilder
         Supplier<BufferPool> supplyBufferPool)
     {
         this.supplyBufferPool = supplyBufferPool;
+        return this;
+    }
+
+    @Override
+    public StreamFactoryBuilder setGroupBudgetClaimer(LongFunction<IntUnaryOperator> groupBudgetClaimer)
+    {
+        return this;
+    }
+
+    @Override
+    public StreamFactoryBuilder setGroupBudgetReleaser(LongFunction<IntUnaryOperator> groupBudgetReleaser)
+    {
         return this;
     }
 

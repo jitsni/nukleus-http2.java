@@ -19,26 +19,25 @@ import org.reaktivity.nukleus.Configuration;
 
 public class Http2Configuration extends Configuration
 {
+    private static final String HTTP2_SERVER_CONCURRENT_STREAMS = "nukleus.http2.server.concurrent.streams";
+    private static final int HTTP2_SERVER_CONCURRENT_STREAMS_DEFAULT = 100;
 
-    private static final String HTTP2_WINDOW_BYTES = "nukleus.http2.window.bytes";
-    private static final String HTTP_WINDOW_BYTES = "nukleus.http2.window.bytes";
-
-    private static final int HTTP2_WINDOW_BYTES_DEFAULT = 65535;
-    private static final int HTTP_WINDOW_BYTES_DEFAULT = 65535;
+    private static final String HTTP2_ACCESS_CONTROL_ALLOW_ORIGIN = "nukleus.http2.server.access.control.allow.origin";
+    private static final boolean HTTP2_ACCESS_CONTROL_ALLOW_ORIGIN_DEFALUT = false;
 
     Http2Configuration(Configuration config)
     {
         super(config);
     }
 
-    int http2Window()
+    int serverConcurrentStreams()
     {
-        return getInteger(HTTP2_WINDOW_BYTES, HTTP2_WINDOW_BYTES_DEFAULT);
+        return getInteger(HTTP2_SERVER_CONCURRENT_STREAMS, HTTP2_SERVER_CONCURRENT_STREAMS_DEFAULT);
     }
 
-    int httpWindow()
+    boolean accessControlAllowOrigin()
     {
-        return getInteger(HTTP_WINDOW_BYTES, HTTP_WINDOW_BYTES_DEFAULT);
+        return getBoolean(HTTP2_ACCESS_CONTROL_ALLOW_ORIGIN, HTTP2_ACCESS_CONTROL_ALLOW_ORIGIN_DEFALUT);
     }
 
 }

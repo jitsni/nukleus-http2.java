@@ -15,6 +15,31 @@
  */
 package org.reaktivity.nukleus.http2.internal;
 
+import static java.nio.ByteOrder.BIG_ENDIAN;
+import static org.reaktivity.nukleus.buffer.BufferPool.NO_SLOT;
+import static org.reaktivity.nukleus.http2.internal.Http2ConnectionState.HALF_CLOSED_REMOTE;
+import static org.reaktivity.nukleus.http2.internal.Http2ConnectionState.OPEN;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.CONNECTION;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.DEFAULT_ACCESS_CONTROL_ALLOW_ORIGIN;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.KEEP_ALIVE;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.PROXY_CONNECTION;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.TE;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.TRAILERS;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.UPGRADE;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackHeaderFieldFW.HeaderFieldType.UNKNOWN;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackLiteralHeaderFieldFW.LiteralType.INCREMENTAL_INDEXING;
+import static org.reaktivity.nukleus.http2.internal.types.stream.HpackLiteralHeaderFieldFW.LiteralType.WITHOUT_INDEXING;
+import static org.reaktivity.nukleus.http2.internal.types.stream.Http2PrefaceFW.PRI_REQUEST;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+
 import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.collections.Int2ObjectHashMap;
@@ -50,31 +75,6 @@ import org.reaktivity.nukleus.http2.internal.types.stream.ResetFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.WindowFW;
 import org.reaktivity.nukleus.route.RouteManager;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-
-import static java.nio.ByteOrder.BIG_ENDIAN;
-import static org.reaktivity.nukleus.buffer.BufferPool.NO_SLOT;
-import static org.reaktivity.nukleus.http2.internal.Http2ConnectionState.CLOSED;
-import static org.reaktivity.nukleus.http2.internal.Http2ConnectionState.HALF_CLOSED_REMOTE;
-import static org.reaktivity.nukleus.http2.internal.Http2ConnectionState.OPEN;
-import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.CONNECTION;
-import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.KEEP_ALIVE;
-import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.PROXY_CONNECTION;
-import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.TE;
-import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.TRAILERS;
-import static org.reaktivity.nukleus.http2.internal.types.stream.HpackContext.UPGRADE;
-import static org.reaktivity.nukleus.http2.internal.types.stream.HpackHeaderFieldFW.HeaderFieldType.UNKNOWN;
-import static org.reaktivity.nukleus.http2.internal.types.stream.HpackLiteralHeaderFieldFW.LiteralType.INCREMENTAL_INDEXING;
-import static org.reaktivity.nukleus.http2.internal.types.stream.HpackLiteralHeaderFieldFW.LiteralType.WITHOUT_INDEXING;
-import static org.reaktivity.nukleus.http2.internal.types.stream.Http2PrefaceFW.PRI_REQUEST;
-
 final class Http2Connection
 {
     private static final Map<String, String> EMPTY_HEADERS = Collections.emptyMap();
@@ -97,8 +97,8 @@ final class Http2Connection
     long authorization;
     int lastStreamId;
     long sourceRef;
-    int outWindowBudget;
-    int outWindowPadding;
+    int networkReplyBudget;
+    int networkReplyPadding;
     int outWindowThreshold = -1;
 
     final WriteScheduler writeScheduler;
@@ -108,6 +108,7 @@ final class Http2Connection
     private final HpackContext encodeContext;
     private final MessageFunction<RouteFW> wrapRoute;
 
+    final long networkReplyGroupId;
 
     final Int2ObjectHashMap<Http2Stream> http2Streams;      // HTTP2 stream-id --> Http2Stream
 
@@ -153,6 +154,7 @@ final class Http2Connection
         http2InWindow = localSettings.initialWindowSize;
         http2OutWindow = remoteSettings.initialWindowSize;
         this.networkConsumer = networkConsumer;
+        this.networkReplyGroupId = factory.supplyGroupId.getAsLong();
 
         BiConsumer<DirectBuffer, DirectBuffer> nameValue =
                 ((BiConsumer<DirectBuffer, DirectBuffer>)this::collectHeaders)
@@ -193,7 +195,7 @@ final class Http2Connection
         this.sourceRef = beginRO.sourceRef();
         this.sourceName = beginRO.source().asString();
         this.decoderState = this::decodePreface;
-        initialSettings = new Settings(100, 0);
+        initialSettings = new Settings(factory.config.serverConcurrentStreams(), 0);
         writeScheduler.settings(initialSettings.maxConcurrentStreams, initialSettings.initialWindowSize);
     }
 
@@ -742,9 +744,9 @@ final class Http2Connection
 
     void closeStream(Http2Stream stream)
     {
-        if (stream.state != CLOSED)
+        if (stream.state != Http2ConnectionState.CLOSED)
         {
-            stream.state = CLOSED;
+            stream.state = Http2ConnectionState.CLOSED;
 
             if (stream.isClientInitiated())
             {
@@ -880,7 +882,7 @@ final class Http2Connection
                 //stream.httpWriteScheduler.doEnd(stream.targetId);
                 return;
             }
-            stream.state = Http2ConnectionState.HALF_CLOSED_REMOTE;
+            stream.state = HALF_CLOSED_REMOTE;
         }
 
         stream.onData();
@@ -1420,8 +1422,9 @@ final class Http2Connection
     {
         encodeHeadersContext.reset();
 
-        httpHeaders.forEach(this::status)               // notes if there is :status
-                   .forEach(this::connectionHeaders);   // collects all connection headers
+        httpHeaders.forEach(this::status)                       // checks if there is :status
+                   .forEach(this::accessControlAllowOrigin)     // checks if there is access-control-allow-origin
+                   .forEach(this::connectionHeaders);           // collects all connection headers
         if (!encodeHeadersContext.status)
         {
             builder.header(b -> b.indexed(8));          // no mandatory :status header, add :status: 200
@@ -1434,9 +1437,14 @@ final class Http2Connection
                 builder.header(b -> mapHeader(h, b));
             }
         });
+
+        if (factory.config.accessControlAllowOrigin() && !encodeHeadersContext.accessControlAllowOrigin)
+        {
+            builder.header(b -> b.literal(l -> l.type(WITHOUT_INDEXING).name(20).value(DEFAULT_ACCESS_CONTROL_ALLOW_ORIGIN)));
+        }
     }
 
-    void status(HttpHeaderFW httpHeader)
+    private void status(HttpHeaderFW httpHeader)
     {
         if (!encodeHeadersContext.status)
         {
@@ -1452,7 +1460,24 @@ final class Http2Connection
         }
     }
 
-    void connectionHeaders(HttpHeaderFW httpHeader)
+    // Checks if response has access-control-allow-origin header
+    private void accessControlAllowOrigin(HttpHeaderFW httpHeader)
+    {
+        if (factory.config.accessControlAllowOrigin() && !encodeHeadersContext.accessControlAllowOrigin)
+        {
+            StringFW name = httpHeader.name();
+            String16FW value = httpHeader.value();
+            factory.nameRO.wrap(name.buffer(), name.offset() + 1, name.sizeof() - 1); // +1, -1 for length-prefixed buffer
+            factory.valueRO.wrap(value.buffer(), value.offset() + 2, value.sizeof() - 2);
+
+            if (factory.nameRO.equals(encodeContext.nameBuffer(20)))
+            {
+                encodeHeadersContext.accessControlAllowOrigin = true;
+            }
+        }
+    }
+
+    private void connectionHeaders(HttpHeaderFW httpHeader)
     {
         StringFW name = httpHeader.name();
         String16FW value = httpHeader.value();
@@ -1468,7 +1493,7 @@ final class Http2Connection
         }
     }
 
-    boolean validHeader(HttpHeaderFW httpHeader)
+    private boolean validHeader(HttpHeaderFW httpHeader)
     {
         StringFW name = httpHeader.name();
         String16FW value = httpHeader.value();
@@ -1591,6 +1616,17 @@ final class Http2Connection
         }
         if (payload.sizeof() > 0)
         {
+            Http2Stream stream = http2Streams.get(correlation.http2StreamId);
+            if (stream != null)
+            {
+                stream.applicationReplyBudget -= dataRO.length() + dataRO.padding();
+                if (stream.applicationReplyBudget < 0)
+                {
+                    doRstByUs(stream, Http2ErrorCode.INTERNAL_ERROR);
+                    return;
+                }
+            }
+
             writeScheduler.data(correlation.http2StreamId, payload.buffer(), payload.offset(), payload.sizeof());
         }
 
@@ -1656,11 +1692,13 @@ final class Http2Connection
     private static final class EncodeHeadersContext
     {
         boolean status;
+        boolean accessControlAllowOrigin;
         final List<String> connectionHeaders = new ArrayList<>();
 
         void reset()
         {
             status = false;
+            accessControlAllowOrigin = false;
             connectionHeaders.clear();
         }
 

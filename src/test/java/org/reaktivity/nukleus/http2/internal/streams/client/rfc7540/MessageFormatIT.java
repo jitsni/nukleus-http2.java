@@ -29,6 +29,7 @@ import static org.junit.rules.RuleChain.outerRule;
 
 import org.junit.Ignore;
 
+@Ignore
 public class MessageFormatIT
 {
     private final K3poRule k3po = new K3poRule()

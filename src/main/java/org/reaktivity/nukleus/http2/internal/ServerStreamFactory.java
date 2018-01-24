@@ -15,6 +15,12 @@
  */
 package org.reaktivity.nukleus.http2.internal;
 
+import static java.util.Objects.requireNonNull;
+
+import java.util.function.IntUnaryOperator;
+import java.util.function.LongFunction;
+import java.util.function.LongSupplier;
+
 import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.collections.Long2ObjectHashMap;
@@ -47,10 +53,6 @@ import org.reaktivity.nukleus.http2.internal.types.stream.ResetFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.WindowFW;
 import org.reaktivity.nukleus.route.RouteManager;
 import org.reaktivity.nukleus.stream.StreamFactory;
-
-import java.util.function.LongSupplier;
-
-import static java.util.Objects.requireNonNull;
 
 public final class ServerStreamFactory implements StreamFactory
 {
@@ -96,7 +98,7 @@ public final class ServerStreamFactory implements StreamFactory
     private final WindowFW.Builder windowRW = new WindowFW.Builder();
     private final ResetFW.Builder resetRW = new ResetFW.Builder();
 
-    private final Http2Configuration config;
+    final Http2Configuration config;
     private final RouteManager router;
     private final MutableDirectBuffer writeBuffer;
     final BufferPool bufferPool;
@@ -115,6 +117,9 @@ public final class ServerStreamFactory implements StreamFactory
 
     final Long2ObjectHashMap<Correlation> correlations;
     private final MessageFunction<RouteFW> wrapRoute;
+    final LongSupplier supplyGroupId;
+    final LongFunction<IntUnaryOperator> groupBudgetClaimer;
+    final LongFunction<IntUnaryOperator> groupBudgetReleaser;
 
     ServerStreamFactory(
             Http2Configuration config,
@@ -123,7 +128,10 @@ public final class ServerStreamFactory implements StreamFactory
             BufferPool bufferPool,
             LongSupplier supplyStreamId,
             LongSupplier supplyCorrelationId,
-            Long2ObjectHashMap<Correlation> correlations)
+            Long2ObjectHashMap<Correlation> correlations,
+            LongSupplier supplyGroupId,
+            LongFunction<IntUnaryOperator> groupBudgetClaimer,
+            LongFunction<IntUnaryOperator> groupBudgetReleaser)
     {
         this.config = config;
         this.router = requireNonNull(router);
@@ -142,6 +150,9 @@ public final class ServerStreamFactory implements StreamFactory
         this.supplyStreamId = requireNonNull(supplyStreamId);
         this.supplyCorrelationId = requireNonNull(supplyCorrelationId);
         this.correlations = requireNonNull(correlations);
+        this.supplyGroupId = requireNonNull(supplyGroupId);
+        this.groupBudgetClaimer = requireNonNull(groupBudgetClaimer);
+        this.groupBudgetReleaser = requireNonNull(groupBudgetReleaser);
 
         this.httpWriter = new HttpWriter(writeBuffer);
         this.http2Writer = new Http2Writer(writeBuffer);
@@ -305,7 +316,7 @@ public final class ServerStreamFactory implements StreamFactory
             networkReplyId = supplyStreamId.getAsLong();
 
             initialWindow = bufferPool.slotCapacity();
-            doWindow(networkThrottle, networkId, initialWindow, 0);
+            doWindow(networkThrottle, networkId, initialWindow, 0, 0);
             window = initialWindow;
 
             doBegin(networkReply, networkReplyId, 0L, networkCorrelationId);
@@ -320,7 +331,7 @@ public final class ServerStreamFactory implements StreamFactory
         private void handleData(
                 DataFW data)
         {
-            window -= dataRO.length();
+            window -= dataRO.length() + dataRO.padding();
             if (window < 0)
             {
                 doReset(networkThrottle, networkId);
@@ -332,7 +343,7 @@ public final class ServerStreamFactory implements StreamFactory
                 {
                     int windowPending = initialWindow - window;
                     window = initialWindow;
-                    doWindow(networkThrottle, networkId, windowPending, 0);
+                    doWindow(networkThrottle, networkId, windowPending, 0, 0);
                 }
 
                 http2Connection.handleData(data);
@@ -388,8 +399,8 @@ public final class ServerStreamFactory implements StreamFactory
             {
                 http2Connection.outWindowThreshold = (int) (OUTWINDOW_LOW_THRESHOLD * credit);
             }
-            http2Connection.outWindowBudget += credit;
-            http2Connection.outWindowPadding = padding;
+            http2Connection.networkReplyBudget += credit;
+            http2Connection.networkReplyPadding = padding;
             http2Connection.handleWindow(window);
         }
 
@@ -547,12 +558,14 @@ public final class ServerStreamFactory implements StreamFactory
             final MessageConsumer throttle,
             final long throttleId,
             final int credit,
-            final int padding)
+            final int padding,
+            final long groupId)
     {
         final WindowFW window = windowRW.wrap(writeBuffer, 0, writeBuffer.capacity())
                                         .streamId(throttleId)
                                         .credit(credit)
                                         .padding(padding)
+                                        .groupId(groupId)
                                         .build();
 
         throttle.accept(window.typeId(), window.buffer(), window.offset(), window.sizeof());

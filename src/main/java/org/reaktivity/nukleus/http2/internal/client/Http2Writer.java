@@ -214,6 +214,8 @@ class Http2Writer
                 MutableDirectBuffer buffer = acquireConnectionBuffer();
                 DataFW data = dataRW.wrap(writeBuffer, 0, writeBuffer.capacity())
                         .streamId(clientConnection.nukleusStreamId)
+                        .groupId(0)
+                        .padding(0)
                         .payload(buffer, offset, toSend)
                         .build();
                 target.accept(data.typeId(), data.buffer(), data.offset(), data.sizeof());
