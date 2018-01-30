@@ -369,6 +369,8 @@ class ClientConnectReplyStream
 
             DataFW data = factory.dataRW.wrap(factory.writeBuffer, 0, factory.writeBuffer.capacity())
                     .streamId(stream.acceptReplyStreamId)
+                    .groupId(0)
+                    .padding(0)
                     .payload(http2Data.buffer(), offset, dataLength)
                     .build();
 
