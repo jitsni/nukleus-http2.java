@@ -390,7 +390,7 @@ class Http2ClientConnection
         noClientStreams++;
     }
 
-    void mapHttpHeadersToHttp2(ListFW<HttpHeaderFW> httpHeaders, HpackHeaderBlockFW.Builder builder)
+    private void mapHttpHeadersToHttp2(ListFW<HttpHeaderFW> httpHeaders, HpackHeaderBlockFW.Builder builder)
     {
         connectionHeaders.clear();
         httpHeaders.forEach(this::checkConnectionHeader);
@@ -509,7 +509,7 @@ class Http2ClientConnection
         http2Writer.doDataEos(http2StreamId);
         http2Writer.flush();
         clientStream.endSent = true;
-}
+    }
 
     /**
      * Decodes a full http2 header and transforms it in a list of http headers.

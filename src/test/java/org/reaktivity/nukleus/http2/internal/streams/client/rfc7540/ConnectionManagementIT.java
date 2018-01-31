@@ -228,7 +228,6 @@ public class ConnectionManagementIT
         k3po.finish();
     }
 
-    @Ignore
     @Test
     @Specification({
             "${route}/client/controller",
