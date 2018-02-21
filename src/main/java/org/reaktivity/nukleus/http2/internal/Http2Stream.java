@@ -165,9 +165,20 @@ class Http2Stream implements Closeable
         Http2Decoder.transferForData(connection.regionsRW.build(), factory.http2RO, factory.http2DataRO, factory.transferRW);
         TransferFW transfer = factory.transferRW.build();
         factory.doTransfer(applicationTarget, transfer);
+        int[] payloadLength = new int[1];
+        transfer.regions().forEach(r ->
+        {
+            payloadLength[0] += r.length();
+            System.out.printf("H2 TRANSFER address=%d length=%d\n", r.address(), r.length());
+        });
+        System.out.printf("H2 TRANSFER total=%d\n", payloadLength[0]);
+        assert payloadLength[0] == factory.http2DataRO.dataLength();
 
         if (factory.http2DataRO.dataLength() > 0)
         {
+            http2InWindow += factory.http2DataRO.dataLength();
+            connection.http2InWindow += factory.http2DataRO.dataLength();
+
             // HTTP2 connection-level flow-control
             connection.writeScheduler.windowUpdate(0, factory.http2DataRO.dataLength());
 

@@ -282,7 +282,6 @@ public final class ServerStreamFactory implements StreamFactory
         private void handleBegin(
                 BeginFW begin)
         {
-            doAck(networkThrottle, networkId);
             final String networkReplyName = begin.source().asString();
             networkCorrelationId = begin.correlationId();
 
@@ -430,7 +429,6 @@ public final class ServerStreamFactory implements StreamFactory
         private void handleBegin(
             BeginFW begin)
         {
-            doAck(applicationReplyThrottle, applicationReplyId);
             final long sourceRef = begin.sourceRef();
             final long correlationId = begin.correlationId();
             correlation = sourceRef == 0L ? correlations.remove(correlationId) : null;
@@ -520,6 +518,21 @@ public final class ServerStreamFactory implements StreamFactory
                          .streamId(targetId)
                          .build();
         doAck(target, ack);
+    }
+
+    void doReqAck(
+            final RegionsManager regionsManager,
+            final MessageConsumer throttle,
+            final AckFW ack)
+    {
+
+        ack.regions().forEach(r ->
+        {
+            System.out.printf("H2 ACK address=%d length=%d\n", r.address(), r.length());
+            regionsManager.remove(r.address(), r.length());
+        });
+
+        doAck(throttle, ack);
     }
 
     void doAck(

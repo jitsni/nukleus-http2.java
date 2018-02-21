@@ -99,6 +99,7 @@ class NukleusWriteScheduler implements Closeable
         {
             regionWriteOffset = regionAckOffset = 0;
         }
+        System.out.printf("h2nukleus regionWriteOffset = %d regionAckOffset = %d\n", regionWriteOffset, regionAckOffset);
     }
 
     void flushBegin()
@@ -119,6 +120,8 @@ class NukleusWriteScheduler implements Closeable
     boolean fits(
         int sizeof)
     {
+        System.out.printf("h2nukleus sizeof = %d remaining = %d\n", sizeof, remaining());
+
         return sizeof <= remaining();
     }
 

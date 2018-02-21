@@ -286,10 +286,6 @@ public class Http2WriteScheduler implements WriteScheduler
         {
             return true;
         }
-        else
-        {
-            // TODO ACK the regions
-        }
 
         transfer.regions().forEach(r ->
         {
@@ -419,6 +415,7 @@ public class Http2WriteScheduler implements WriteScheduler
     private void flush()
     {
 
+        System.out.printf("flushbegin entryCount = %d\n", entryCount);
         Entry entry;
         writer.flushBegin();
         while ((entry = pop()) != null)
@@ -432,6 +429,7 @@ public class Http2WriteScheduler implements WriteScheduler
             endSent = true;
             writer.doEnd();
         }
+        System.out.printf("flushend entryCount = %d\n", entryCount);
     }
 
     @Override
@@ -492,6 +490,8 @@ public class Http2WriteScheduler implements WriteScheduler
         if (buffered(stream))
         {
             Deque replyQueue = queue(stream);
+            System.out.println("before stream queue = " + replyQueue.size());
+
             Entry entry = (Entry) replyQueue.peek();
             if (entry.fits())
             {
@@ -546,6 +546,8 @@ public class Http2WriteScheduler implements WriteScheduler
     {
         if (canStreamWrite(stream, type))
         {
+            System.out.printf("<- %s\n", type);
+
             int sizeof = writer.queueHttp2Frame(sizeofGuess, visitor);
 
             assert sizeof >= 9;
@@ -566,6 +568,15 @@ public class Http2WriteScheduler implements WriteScheduler
             stream.http2OutWindow -= length;
             connection.http2OutWindow -= length;
             stream.totalOutData += length;
+
+            System.out.printf("<- DATA(%d) totalIn=%d totalOut=%d queue=%d s.window=%d c.window=%d\n",
+                    length, stream.totalData, stream.totalOutData,
+                    stream.replyQueue.size(), stream.http2OutWindow, connection.http2OutWindow);
+
+        }
+        else
+        {
+            throw new IllegalStateException("cannot release regions");
         }
 
         // TODO ACK

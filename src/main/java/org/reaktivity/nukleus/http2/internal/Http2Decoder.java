@@ -89,6 +89,11 @@ public class Http2Decoder
 
     void decode(ListFW<RegionFW> regionsRO)
     {
+        regionsRO.forEach(r ->
+        {
+            System.out.printf("-> address=%d length=%d stream-id=%d\n", r.address(), r.length(), r.streamId());
+        });
+
         regionsRO.forEach(r -> processRegion(r.address(), r.length(), r.streamId()));
     }
 
@@ -103,6 +108,8 @@ public class Http2Decoder
         int consumed;
         while(remaining > 0)
         {
+System.out.printf("start processRegion (%d %d) state=%s frameSize=%d compositeBufferLength=%d\n",
+offset, remaining, state, frameSize, compositeBufferLength);
             switch (state)
             {
                 case PREFACE:
@@ -119,6 +126,8 @@ public class Http2Decoder
             }
             offset += consumed;
             remaining -= consumed;
+System.out.printf("end processRegion consumed=%d (%d %d) frameSize=%d compositeBufferLength=%d\n",
+        consumed, offset, remaining, frameSize, compositeBufferLength);
         }
     }
 
@@ -135,6 +144,7 @@ public class Http2Decoder
         if (compositeBufferLength == frameSize)
         {
             DirectBuffer compositeBuffer = compositeBufferBuilder.build();
+            System.out.println("================== processFrame ================");
             processFrame(compositeBuffer);
         }
 
@@ -146,6 +156,12 @@ public class Http2Decoder
     {
         assert compositeBuffer.capacity() == compositeBufferLength;
         Http2FrameFW frame = frameRO.wrap(compositeBuffer, 0, compositeBufferLength);
+
+        for(int i=0; i < compositeBufferLength; i++)
+        {
+            System.out.printf("%02x ", compositeBuffer.getByte(i));
+        }
+        System.out.println();
         frameConsumer.accept(frame);
         compositeBufferLength = 0;
         frameSize = 0;
@@ -172,6 +188,7 @@ public class Http2Decoder
             if (frameHeader.payloadLength() == 0)
             {
                 // complete frame is in compositeBuffer
+                System.out.println("================== processFrame ================");
                 processFrame(compositeBuffer);
             }
             else

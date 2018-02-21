@@ -131,6 +131,8 @@ final class Http2Connection
     boolean networkReplyTransferRst;
     boolean networkReplyTransferFin;
 
+    final RegionsManager regionsManager;
+
     Http2Connection(
         ServerStreamFactory factory,
         RouteManager router,
@@ -157,6 +159,7 @@ final class Http2Connection
         this.networkReply = networkReply;
         this.networkThrottle = networkThrottle;
         this.networkId = networkId;
+        this.regionsManager = new RegionsManager();
 
         BiConsumer<DirectBuffer, DirectBuffer> nameValue =
                 ((BiConsumer<DirectBuffer, DirectBuffer>)this::collectHeaders)
@@ -201,7 +204,8 @@ final class Http2Connection
                      .streamId(networkId);
         Http2Decoder.ackAll(regionsRW.build(), factory.ackRW);
         AckFW ack = factory.ackRW.build();
-        factory.doAck(networkThrottle, ack);
+        System.out.println("ackAll");
+        factory.doReqAck(regionsManager, networkThrottle, ack);
     }
 
     void ackForData()
@@ -210,7 +214,8 @@ final class Http2Connection
                      .streamId(networkId);
         Http2Decoder.ackForData(regionsRW.build(), factory.http2RO, factory.http2DataRO, factory.ackRW);
         AckFW ack = factory.ackRW.build();
-        factory.doAck(networkThrottle, ack);
+        System.out.println("ackForData");
+        factory.doReqAck(regionsManager, networkThrottle, ack);
     }
 
     void processUnexpected(
@@ -239,6 +244,8 @@ final class Http2Connection
 
     void handleData(TransferFW dataRO)
     {
+        dataRO.regions().forEach(r -> regionsManager.add(r.address(), r.length()));
+        //regionsManager.print();
         decoder.decode(dataRO.regions());
     }
 
@@ -440,6 +447,7 @@ final class Http2Connection
     private void processHttp2Frame(Http2FrameFW http2RO)
     {
         Http2FrameType http2FrameType = factory.http2RO.type();
+        System.out.printf("-> recv %s\n", factory.http2RO);
         // Assembles HTTP2 HEADERS and its CONTINUATIONS frames, if any
         if (!http2HeadersAvailable())
         {
@@ -732,6 +740,8 @@ final class Http2Connection
         if (streamId == 0)
         {
             http2OutWindow += factory.http2WindowRO.size();
+            System.out.printf("c.http2OutWindow=%d\n", http2OutWindow);
+
             if (http2OutWindow > Integer.MAX_VALUE)
             {
                 error(Http2ErrorCode.FLOW_CONTROL_ERROR);
@@ -743,6 +753,7 @@ final class Http2Connection
         {
             Http2Stream stream = http2Streams.get(streamId);
             stream.http2OutWindow += factory.http2WindowRO.size();
+            System.out.printf("s.http2OutWindow=%d\n", stream.http2OutWindow);
             if (stream.http2OutWindow > Integer.MAX_VALUE)
             {
                 streamError(streamId, Http2ErrorCode.FLOW_CONTROL_ERROR);
@@ -997,7 +1008,8 @@ final class Http2Connection
                 m -> m.address(r.address()).length(r.length()).streamId(r.streamId())));
         AckFW newAck = factory.ackRW.build();
 
-        factory.doAck(networkThrottle, newAck);
+        System.out.println("onApplicationAck");
+        factory.doReqAck(regionsManager, networkThrottle, newAck);
     }
 
     void error(Http2ErrorCode errorCode)
@@ -1671,5 +1683,7 @@ final class Http2Connection
         }
 
     }
+
+
 
 }

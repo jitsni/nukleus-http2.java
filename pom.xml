@@ -60,6 +60,12 @@
   </properties>
 
   <dependencies>
+<dependency>
+<groupId>org.reaktivity</groupId>
+<artifactId>nukleus-tcp</artifactId>
+<version>develop-SNAPSHOT</version>
+<scope>provided</scope>
+</dependency>
     <dependency>
       <groupId>org.reaktivity</groupId>
       <artifactId>nukleus</artifactId>
