@@ -113,14 +113,15 @@ public class Http2DecoderTest
         decoder.decode(regionRO);
 
         assertEquals(3, frameCount);
-        assertEquals(4, ackRegions.size());
-        assertEquals(new Region(r1.address, r1.length, r1.streamId), ackRegions.get(0));
-        assertEquals(new Region(r2.address, r2.length, r2.streamId), ackRegions.get(1));
-        assertEquals(new Region(r3.address, 9, r3.streamId), ackRegions.get(2));
-        assertEquals(new Region(r4.address, r4.length, r4.streamId), ackRegions.get(3));
+        assertEquals(5, ackRegions.size());
+        assertEquals(new Region(r1.address, r1.length, r1.streamId), ackRegions.get(0));     // PRI
+        assertEquals(new Region(r2.address, r2.length, r2.streamId), ackRegions.get(1));     // HEADERS
+        assertEquals(new Region(r3.address, 10, r3.streamId), ackRegions.get(2));     // DATA header
+        assertEquals(new Region(r3.address + r3.length - 2, 2, r3.streamId), ackRegions.get(3)); // padding
+        assertEquals(new Region(r4.address, r4.length, r4.streamId), ackRegions.get(4));     // SETTINGS
 
         assertEquals(1, transferRegions.size());
-        assertEquals(new Region(r3.address + 9, r3.length - 9, r3.streamId), transferRegions.get(0));
+        assertEquals(new Region(r3.address + 10, r3.length - 12, r3.streamId), transferRegions.get(0));
     }
 
     @Test
@@ -189,11 +190,11 @@ public class Http2DecoderTest
 
             assertEquals(3, frameCount);
             assertEquals(2, ackRegions.size());
-            assertEquals(new Region(r1.address, r1.length + r2.length + 9, r1.streamId), ackRegions.get(0));
-            assertEquals(new Region(r4.address, r4.length, r4.streamId), ackRegions.get(1));
+            assertEquals(new Region(r1.address, r1.length + r2.length + 10, r1.streamId), ackRegions.get(0));
+            assertEquals(new Region(r4.address - 2, r4.length + 2, r4.streamId), ackRegions.get(1));
 
             assertEquals(1, transferRegions.size());
-            assertEquals(new Region(r3.address + 9, r3.length - 9, r3.streamId), transferRegions.get(0));
+            assertEquals(new Region(r3.address + 10, r3.length - 12, r3.streamId), transferRegions.get(0));
         }
     }
 
@@ -204,7 +205,7 @@ public class Http2DecoderTest
         return new Http2DataFW.Builder()
                 .wrap(buf, offset, buf.capacity())
                 .streamId(5)
-                .payload(payload)
+                .paddedData(2, payload, 0, payload.capacity())
                 .build();
     }
 

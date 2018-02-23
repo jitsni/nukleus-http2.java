@@ -261,23 +261,32 @@ public class Http2Decoder
     {
         assert http2RO.type() == DATA;
         Http2DataFW dataRO = http2DataRO.wrap(http2RO.buffer(), http2RO.offset(), http2RO.limit());
-        if (dataRO.padding())
-        {
-            throw new UnsupportedOperationException("TODO padding is not yet implemented");
-        }
 
         int dataStart = 9 + (dataRO.padding() ? 1 : 0);
         int dataEnd = dataStart + dataRO.dataLength();
+        int[] skip = new int[1];
+        skip[0] = dataStart;
 
         // Transfer for application payload
         int[] total = new int[1];
         regions.forEach(r ->
         {
-            // TODO for padding need to break up regions
-            if (total[0] >= dataStart)
+            int offset = 0;
+            int length;
+
+            if (skip[0] > 0)
             {
-                transferRW.regionsItem(ar -> ar.address(r.address()).length(r.length()).streamId(r.streamId()));
+                offset = Math.min(skip[0], r.length());
+                skip[0] -= offset;
             }
+            length = Math.min(dataEnd - total[0], r.length()) - offset;
+            int offset1 = offset;
+
+            if (length > 0)
+            {
+                transferRW.regionsItem(ar -> ar.address(r.address() + offset1).length(length).streamId(r.streamId()));
+            }
+
             total[0] += r.length();
         });
     }

@@ -21,6 +21,7 @@ import org.agrona.concurrent.AtomicBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
 import static org.reaktivity.nukleus.http2.internal.types.stream.Http2Flags.END_STREAM;
+import static org.reaktivity.nukleus.http2.internal.types.stream.Http2Flags.PADDED;
 import static org.reaktivity.nukleus.http2.internal.types.stream.Http2FrameType.DATA;
 
 /*
@@ -129,6 +130,21 @@ public class Http2DataFW extends Http2FrameFW
         public Builder endStream()
         {
             buffer().putByte(offset() + FLAGS_OFFSET, END_STREAM);
+            return this;
+        }
+
+        public Builder paddedData(int padLength, DirectBuffer data, int offset, int length)
+        {
+            byte flags = buffer().getByte(offset() + FLAGS_OFFSET);
+            buffer().putByte(offset() + FLAGS_OFFSET, (byte) (flags | PADDED));
+
+            buffer().putByte(offset() + PAYLOAD_OFFSET, (byte) padLength);
+
+            buffer().putBytes(offset() + PAYLOAD_OFFSET + 1, data, offset, length);
+
+            buffer().setMemory(offset() + PAYLOAD_OFFSET + 1 + length, padLength, (byte) 0);
+
+            payloadLength(1 + length + padLength);
             return this;
         }
 
