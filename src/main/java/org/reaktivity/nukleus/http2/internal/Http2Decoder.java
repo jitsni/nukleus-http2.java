@@ -271,6 +271,13 @@ public class Http2Decoder
         int[] total = new int[1];
         regions.forEach(r ->
         {
+//            TODO: may this logic may be simple
+//            int offset = Math.min(dataStart - total[0], 0);
+//            int length = Math.min(dataEnd - offset, r.length());
+//            if (offset + length > dataStart)
+//            {
+//                transferRW.regionsItem(ar -> ar.address(r.address() + offset).length(length).streamId(r.streamId()));
+//            }
             int offset = 0;
             int length;
 
