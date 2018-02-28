@@ -42,6 +42,7 @@ import org.reaktivity.nukleus.http2.internal.types.stream.Http2ContinuationFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.Http2DataExFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.Http2DataFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.Http2FrameFW;
+import org.reaktivity.nukleus.http2.internal.types.stream.Http2FrameHeaderFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.Http2HeadersFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.Http2PingFW;
 import org.reaktivity.nukleus.http2.internal.types.stream.Http2PrefaceFW;
@@ -75,6 +76,7 @@ public final class ServerStreamFactory implements StreamFactory
 
     final HttpRouteExFW httpRouteExRO = new HttpRouteExFW();
     final Http2PrefaceFW prefaceRO = new Http2PrefaceFW();
+    final Http2FrameHeaderFW frameHeaderRO = new Http2FrameHeaderFW();
     final Http2FrameFW http2RO = new Http2FrameFW();
     final Http2SettingsFW settingsRO = new Http2SettingsFW();
     final Http2DataFW http2DataRO = new Http2DataFW();
