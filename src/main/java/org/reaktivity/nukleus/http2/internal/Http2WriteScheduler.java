@@ -70,7 +70,7 @@ public class Http2WriteScheduler implements WriteScheduler
         Http2Stream stream = stream(streamId);
         Flyweight.Builder.Visitor visitor = http2Writer.visitWindowUpdate(streamId, update);
 
-        if (!buffered() && hasNukleusBudget(length))
+        if (!buffered() && hasNukleusBudget(length) && claimNukleusBudget(length))
         {
             http2(stream, type, sizeof, visitor);
         }
@@ -139,7 +139,7 @@ public class Http2WriteScheduler implements WriteScheduler
         Http2Stream stream = stream(streamId);
         Http2FrameType type = RST_STREAM;
 
-        if (!buffered() && hasNukleusBudget(length))
+        if (!buffered() && hasNukleusBudget(length) && claimNukleusBudget(length))
         {
             http2(stream, type, sizeof, visitor);
         }
@@ -156,12 +156,12 @@ public class Http2WriteScheduler implements WriteScheduler
     public boolean settings(int maxConcurrentStreams, int initialWindowSize)
     {
         int streamId = 0;
-        int length = 6;                     // 6 for a setting
+        int length = 12;                    // 6 for a setting
         int sizeof = length + 9;            // +9 for HTTP2 framing
         Flyweight.Builder.Visitor settings = http2Writer.visitSettings(maxConcurrentStreams, initialWindowSize);
         Http2FrameType type = SETTINGS;
 
-        if (!buffered() && hasNukleusBudget(length))
+        if (!buffered() && hasNukleusBudget(length) && claimNukleusBudget(length))
         {
             http2(null, type, sizeof, settings);
         }
@@ -183,7 +183,7 @@ public class Http2WriteScheduler implements WriteScheduler
         Flyweight.Builder.Visitor visitor = http2Writer.visitSettingsAck();
         Http2FrameType type = SETTINGS;
 
-        if (!buffered() && hasNukleusBudget(length))
+        if (!buffered() && hasNukleusBudget(length) && claimNukleusBudget(length))
         {
             http2(null, type, sizeof, visitor);
         }
@@ -205,17 +205,17 @@ public class Http2WriteScheduler implements WriteScheduler
         Http2FrameType type = HEADERS;
         Http2Stream stream = stream(streamId);
 
-        if (buffered() || !hasNukleusBudget(length))
-        {
+//        if (buffered() || !hasNukleusBudget(length))
+//        {
             copy = new UnsafeBuffer(new byte[8192]);
             connection.factory.blockRW.wrap(copy, 0, copy.capacity());
             connection.mapHeaders(headers, connection.factory.blockRW);
             HpackHeaderBlockFW block = connection.factory.blockRW.build();
             length = block.sizeof();
             sizeof = 9 + length;
-        }
+//        }
 
-        if (buffered() || !hasNukleusBudget(length))
+        if (buffered() || !hasNukleusBudget(length) || !claimNukleusBudget(length))
         {
             Flyweight.Builder.Visitor visitor = http2Writer.visitHeaders(streamId, flags, copy, 0, length);
             Entry entry = new Entry(stream, streamId, length, type, visitor);
@@ -350,7 +350,7 @@ public class Http2WriteScheduler implements WriteScheduler
         stream.endStream = true;
 
         if (!buffered() && !buffered(streamId) && hasNukleusBudget(length) && 0 <= connection.http2OutWindow &&
-                0 <= stream.http2OutWindow)
+                0 <= stream.http2OutWindow && claimNukleusBudget(length))
         {
             http2(stream, type, sizeof, data);
             connection.closeStream(stream);
@@ -366,13 +366,35 @@ public class Http2WriteScheduler implements WriteScheduler
 
     private boolean hasNukleusBudget(int length)
     {
-        int frameCount = length == 0 ? 1 : (int) Math.ceil((double) length/connection.remoteSettings.maxFrameSize);
-        int sizeof = length + frameCount * 9;
+        int sizeof = withFraming(length);
         return writer.fits(sizeof);
+    }
+
+    private int withFraming(int length)
+    {
+        int frameCount = length == 0 ? 1 : (int) Math.ceil((double) length/connection.remoteSettings.maxFrameSize);
+        return length + frameCount * 9;
+    }
+
+    private boolean claimNukleusBudget(int length)
+    {
+        int size = withFraming(length);
+        int claimed = connection.factory.groupBudgetClaimer.apply(connection.networkReplyGroupId)
+                                                           .applyAsInt(size);
+        System.out.printf("h2res groupId=%d wanted=%d claimed=%d\n", connection.networkReplyGroupId, size, claimed);
+        if (claimed > 0 && claimed != size)
+        {
+            System.out.printf("h2req groupId=%d released=%d\n", connection.networkReplyGroupId, claimed);
+            connection.factory.groupBudgetReleaser.apply(connection.networkReplyGroupId)
+                                                  .applyAsInt(claimed);
+            return false;
+        }
+        return true;
     }
 
     private void addEntry(Entry entry)
     {
+        System.out.println("************ addEntry");
         if (entry.type == DATA)
         {
             Deque<WriteScheduler.Entry> queue = queue(entry.stream);
@@ -551,6 +573,8 @@ public class Http2WriteScheduler implements WriteScheduler
             int sizeof = writer.http2Frame(sizeofGuess, visitor);
             assert sizeof >= 9;
 
+            System.out.printf("<- %s(%d)\n", type, sizeof);
+
             int length = sizeof - 9;
             if (type == DATA)
             {
@@ -601,7 +625,7 @@ public class Http2WriteScheduler implements WriteScheduler
 
         boolean fits()
         {
-            return hasNukleusBudget(length);
+            return hasNukleusBudget(length) && claimNukleusBudget(length);
         }
 
         void write()

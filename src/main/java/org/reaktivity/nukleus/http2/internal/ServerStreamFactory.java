@@ -56,8 +56,6 @@ import org.reaktivity.nukleus.stream.StreamFactory;
 
 public final class ServerStreamFactory implements StreamFactory
 {
-
-    private static final double OUTWINDOW_LOW_THRESHOLD = 0.5;      // TODO configuration
     private static final double INWINDOW_THRESHOLD = 0.5;
 
     final RouteFW routeRO = new RouteFW();
@@ -387,14 +385,6 @@ public final class ServerStreamFactory implements StreamFactory
         private void handleWindow(
                 WindowFW window)
         {
-            int credit = windowRO.credit();
-            int padding = windowRO.padding();
-            if (http2Connection.outWindowThreshold == -1)
-            {
-                http2Connection.outWindowThreshold = (int) (OUTWINDOW_LOW_THRESHOLD * credit);
-            }
-            http2Connection.networkReplyBudget += credit;
-            http2Connection.networkReplyPadding = padding;
             http2Connection.handleWindow(window);
         }
 

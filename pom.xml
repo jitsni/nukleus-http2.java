@@ -56,10 +56,16 @@
     <nukleus.version>0.17</nukleus.version>
 
     <nukleus.http2.spec.version>0.37</nukleus.http2.spec.version>
-    <reaktor.version>0.38</reaktor.version>
+    <reaktor.version>develop-SNAPSHOT</reaktor.version>
   </properties>
 
   <dependencies>
+<dependency>
+  <groupId>org.reaktivity</groupId>
+  <artifactId>nukleus-tcp</artifactId>
+  <version>0.32</version>
+  <scope>provided</scope>
+</dependency>
     <dependency>
       <groupId>org.reaktivity</groupId>
       <artifactId>nukleus</artifactId>

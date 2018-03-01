@@ -251,4 +251,14 @@ class Http2Stream
                     (int) applicationReplyCredit, applicationReplyPadding, connection.networkReplyGroupId);
         }
     }
+
+    void sendZeroWindow()
+    {
+        if (applicationReplyThrottle != null)
+        {
+            int applicationReplyPadding = connection.networkReplyPadding + maxHeaderSize;
+            connection.factory.doWindow(applicationReplyThrottle, applicationReplyId,
+                    0, applicationReplyPadding, connection.networkReplyGroupId);
+        }
+    }
 }

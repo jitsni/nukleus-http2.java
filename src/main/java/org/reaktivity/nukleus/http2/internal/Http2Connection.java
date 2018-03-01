@@ -78,6 +78,7 @@ import org.reaktivity.nukleus.route.RouteManager;
 
 final class Http2Connection
 {
+    private static final double OUTWINDOW_LOW_THRESHOLD = 0.5;      // TODO configuration
     private static final Map<String, String> EMPTY_HEADERS = Collections.emptyMap();
 
     ServerStreamFactory factory;
@@ -156,6 +157,7 @@ final class Http2Connection
         http2OutWindow = remoteSettings.initialWindowSize;
         this.networkConsumer = networkConsumer;
         this.networkReplyGroupId = factory.supplyGroupId.getAsLong();
+        System.out.println("**************************************** new connection ******* " + this.networkReplyGroupId);
 
         BiConsumer<DirectBuffer, DirectBuffer> nameValue =
                 ((BiConsumer<DirectBuffer, DirectBuffer>)this::collectHeaders)
@@ -187,6 +189,10 @@ final class Http2Connection
             closeStream(http2Stream);
         }
         http2Streams.clear();
+
+        // Removes the groupId by claiming everything
+        factory.groupBudgetClaimer.apply(networkReplyGroupId)
+                                  .applyAsInt(Integer.MAX_VALUE);
     }
 
     void handleBegin(BeginFW beginRO)
@@ -1066,6 +1072,25 @@ final class Http2Connection
 
     void handleWindow(WindowFW windowRO)
     {
+        int credit = windowRO.credit();
+        int padding = windowRO.padding();
+        if (outWindowThreshold == -1)
+        {
+            outWindowThreshold = (int) (OUTWINDOW_LOW_THRESHOLD * credit);
+        }
+        networkReplyBudget += credit;
+        networkReplyPadding = padding;
+
+        System.out.printf("h2res groupId=%d added=%d\n", networkReplyGroupId, credit);
+
+        factory.groupBudgetReleaser.apply(networkReplyGroupId)
+                                   .applyAsInt(credit);
+
+        // Unblock the stalled(with failed claims) streams
+        for(Http2Stream stream : http2Streams.values())
+        {
+            stream.sendZeroWindow();
+        }
 
         writeScheduler.onWindow();
     }

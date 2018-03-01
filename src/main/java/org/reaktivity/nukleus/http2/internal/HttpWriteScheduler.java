@@ -148,22 +148,25 @@ class HttpWriteScheduler
     private int getPart(int remaining)
     {
         int toHttp = Math.min(remaining, applicationBudget - applicationPadding);
-        return Math.min(toHttp, 65535);
-//        int claimed = stream.connection.factory.groupBudgetClaimer.apply(applicationGroupId)
-//                                                                  .applyAsInt(toHttp + applicationWindowPadding);
-//        toHttp = claimed - applicationWindowPadding;
-//        if (toHttp <= 0)
-//        {
-//            stream.connection.factory.groupBudgetReleaser.apply(applicationGroupId)
-//                                                         .applyAsInt(toHttp);
-//        }
-//        return toHttp;
+        if (toHttp > 0)
+        {
+            int claimed = stream.connection.factory.groupBudgetClaimer.apply(applicationGroupId)
+                                                                      .applyAsInt(toHttp + applicationPadding);
+            System.out.printf("h2req groupId=%d http2-stream-id=%d wanted=(%d + %d) claimed=%d\n",
+                    applicationGroupId, stream.http2StreamId, toHttp, applicationPadding, claimed);
+            toHttp = claimed - applicationPadding;
+            if (toHttp < 0 && claimed > 0)
+            {
+                System.out.printf("h2req groupId=%d http2-stream-id=%d released=%d\n", applicationGroupId, stream.http2StreamId, claimed);
+                stream.connection.factory.groupBudgetReleaser.apply(applicationGroupId)
+                                                             .applyAsInt(claimed);
+            }
+        }
+        return toHttp;
     }
 
     private void toHttp(DirectBuffer buffer, int offset, int length)
     {
-        assert length <= 65535;
-
         applicationBudget -= length + applicationPadding;
         target.doHttpData(applicationTarget, targetId, applicationPadding, buffer, offset, length);
         totalWritten += length;
