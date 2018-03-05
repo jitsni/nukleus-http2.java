@@ -378,17 +378,19 @@ public class Http2WriteScheduler implements WriteScheduler
 
     private boolean claimNukleusBudget(int length)
     {
-        int size = withFraming(length);
-        int claimed = connection.factory.groupBudgetClaimer.apply(connection.networkReplyGroupId)
-                                                           .applyAsInt(size);
-        System.out.printf("h2res groupId=%d wanted=%d claimed=%d\n", connection.networkReplyGroupId, size, claimed);
-        if (claimed > 0 && claimed != size)
-        {
-            System.out.printf("h2req groupId=%d released=%d\n", connection.networkReplyGroupId, claimed);
-            connection.factory.groupBudgetReleaser.apply(connection.networkReplyGroupId)
-                                                  .applyAsInt(claimed);
-            return false;
-        }
+//        int size = withFraming(length);
+//        int claimed = connection.factory.groupBudgetClaimer.apply(connection.networkReplyGroupId)
+//                                                           .applyAsInt(size);
+//        System.out.printf("h2res groupId=%d wanted=%d claimed=%d\n", connection.networkReplyGroupId, size, claimed);
+//        if (claimed > 0 && claimed != size)
+//        {
+//            System.out.printf("h2req groupId=%d released=%d\n", connection.networkReplyGroupId, claimed);
+//            connection.factory.groupBudgetReleaser.apply(connection.networkReplyGroupId)
+//                                                  .applyAsInt(claimed);
+//            return false;
+//        }
+
+        connection.groupBudgetOffset += withFraming(length);
         return true;
     }
 
@@ -518,6 +520,10 @@ public class Http2WriteScheduler implements WriteScheduler
                 entry =  (Entry) replyQueue.poll();
                 return entry;
             }
+            else
+            {
+                System.out.printf("pop(%s) cannot make progress. size=%d\n", stream, replyQueue.size());
+            }
         }
 
         return null;
@@ -573,7 +579,7 @@ public class Http2WriteScheduler implements WriteScheduler
             int sizeof = writer.http2Frame(sizeofGuess, visitor);
             assert sizeof >= 9;
 
-            System.out.printf("<- %s(%d)\n", type, sizeof);
+            //System.out.printf("<- %s(%d)\n", type, sizeof);
 
             int length = sizeof - 9;
             if (type == DATA)

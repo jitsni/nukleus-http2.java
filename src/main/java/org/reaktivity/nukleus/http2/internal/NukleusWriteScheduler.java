@@ -92,7 +92,8 @@ class NukleusWriteScheduler
 
     int nukleusBudgetAdjustment(int sizeof)
     {
-        int nukleusFrameCount = (int) Math.ceil((double)sizeof/65535);
+        //int nukleusFrameCount = (int) Math.ceil((double)sizeof/65535);
+        int nukleusFrameCount = 1;
 
         // Every nukleus DATA frame incurs padding overhead
         return nukleusFrameCount * connection.networkReplyPadding;
@@ -100,13 +101,14 @@ class NukleusWriteScheduler
 
     private void toNetwork(MutableDirectBuffer buffer, int offset, int length)
     {
-        while (length > 0)
-        {
-            int chunk = Math.min(length, 65535);     // limit by nukleus DATA frame length (2 bytes)
-            http2Writer.doData(networkConsumer, targetId, connection.networkReplyPadding, buffer, offset, chunk);
-            offset += chunk;
-            length -= chunk;
-        }
+        http2Writer.doData(networkConsumer, targetId, connection.networkReplyPadding, buffer, offset, length);
+//
+//        while (length > 0)
+//        {
+//            int chunk = Math.min(length, 65535);     // limit by nukleus DATA frame length (2 bytes)
+//            offset += chunk;
+//            length -= chunk;
+//        }
     }
 
 }

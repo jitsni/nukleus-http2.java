@@ -74,7 +74,7 @@ class Http2Stream
     // Estimate only - no of DATA frames + WINDOW frames
     private int maxHeaderSize()
     {
-        int frameCount = (int) Math.ceil(factory.bufferPool.slotCapacity()/connection.remoteSettings.maxFrameSize) + 10;
+        int frameCount = (int) Math.ceil(factory.bufferPool.slotCapacity()/connection.remoteSettings.maxFrameSize);
         return frameCount * 9;
     }
 
@@ -256,6 +256,7 @@ class Http2Stream
     {
         if (applicationReplyThrottle != null)
         {
+            //System.out.printf("h2res zerowindow groupId=%d http2-stream-id=%d\n", connection.networkReplyGroupId, http2StreamId);
             int applicationReplyPadding = connection.networkReplyPadding + maxHeaderSize;
             connection.factory.doWindow(applicationReplyThrottle, applicationReplyId,
                     0, applicationReplyPadding, connection.networkReplyGroupId);

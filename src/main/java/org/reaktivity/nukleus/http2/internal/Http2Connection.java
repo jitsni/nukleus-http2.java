@@ -138,6 +138,7 @@ final class Http2Connection
     MessageConsumer networkConsumer;
     RouteManager router;
     String sourceName;
+    public int groupBudgetOffset;
 
     Http2Connection(ServerStreamFactory factory, RouteManager router, long networkReplyId, MessageConsumer networkConsumer,
                     MessageFunction<RouteFW> wrapRoute)
@@ -1080,16 +1081,20 @@ final class Http2Connection
         }
         networkReplyBudget += credit;
         networkReplyPadding = padding;
+        //System.out.printf("adding credit=%d  offset=%d networkReplyBudget=%d\n", credit, groupBudgetOffset, networkReplyBudget);
+        int groupBudget = factory.groupBudgetReleaser.apply(networkReplyGroupId)
+                                                     .applyAsInt(0);
 
-        System.out.printf("h2res groupId=%d added=%d\n", networkReplyGroupId, credit);
-
-        factory.groupBudgetReleaser.apply(networkReplyGroupId)
-                                   .applyAsInt(credit);
-
-        // Unblock the stalled(with failed claims) streams
-        for(Http2Stream stream : http2Streams.values())
+        int groupCredit = Math.min(60000 - groupBudget, credit);
+        if (groupCredit > 0)
         {
-            stream.sendZeroWindow();
+            factory.groupBudgetReleaser.apply(networkReplyGroupId)
+                                       .applyAsInt(groupCredit);
+            // Unblock the stalled(with failed claims) streams
+            for(Http2Stream stream : http2Streams.values())
+            {
+                stream.sendZeroWindow();
+            }
         }
 
         writeScheduler.onWindow();

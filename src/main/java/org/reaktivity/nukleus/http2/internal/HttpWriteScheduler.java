@@ -152,12 +152,12 @@ class HttpWriteScheduler
         {
             int claimed = stream.connection.factory.groupBudgetClaimer.apply(applicationGroupId)
                                                                       .applyAsInt(toHttp + applicationPadding);
-            System.out.printf("h2req groupId=%d http2-stream-id=%d wanted=(%d + %d) claimed=%d\n",
-                    applicationGroupId, stream.http2StreamId, toHttp, applicationPadding, claimed);
+//            System.out.printf("h2req groupId=%d http2-stream-id=%d wanted=(%d + %d) claimed=%d totalRead=%d totalWritten=%d\n",
+//                    applicationGroupId, stream.http2StreamId, toHttp, applicationPadding, claimed, totalRead, totalWritten);
             toHttp = claimed - applicationPadding;
             if (toHttp < 0 && claimed > 0)
             {
-                System.out.printf("h2req groupId=%d http2-stream-id=%d released=%d\n", applicationGroupId, stream.http2StreamId, claimed);
+//                System.out.printf("h2req groupId=%d http2-stream-id=%d released=%d\n", applicationGroupId, stream.http2StreamId, claimed);
                 stream.connection.factory.groupBudgetReleaser.apply(applicationGroupId)
                                                              .applyAsInt(claimed);
             }
@@ -218,10 +218,15 @@ class HttpWriteScheduler
         long applicationCredit = Math.min(
                 applicationBudget - Math.max(stream.http2InWindow, 0),    // http2InWindow can be -ve
                 httpWriterPool.slotCapacity() - buffered);
+
+        applicationCredit = Math.min(applicationBudget, (httpWriterPool.slotCapacity() - buffered - Math.max(stream.http2InWindow, 0)));
+
         if (applicationCredit > 0)
         {
             stream.http2InWindow += applicationCredit;
             stream.connection.http2InWindow += applicationCredit;
+//            System.out.printf("groupid=%d http2-stream-id=%d window=%d buffered=%d window-update=%d\n",
+//                    applicationGroupId, stream.http2StreamId, stream.http2InWindow, buffered, applicationCredit);
 
             // HTTP2 connection-level flow-control
             stream.connection.writeScheduler.windowUpdate(0, (int) applicationCredit);
