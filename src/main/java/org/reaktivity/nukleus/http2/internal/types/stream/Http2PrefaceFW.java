@@ -16,6 +16,7 @@
 package org.reaktivity.nukleus.http2.internal.types.stream;
 
 import org.agrona.DirectBuffer;
+import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 import org.reaktivity.nukleus.http2.internal.types.Flyweight;
 
@@ -79,5 +80,21 @@ public class Http2PrefaceFW extends Flyweight
         return this;
     }
 
-}
+    public static final class Builder extends Flyweight.Builder<Http2PrefaceFW>
+    {
+        public Builder()
+        {
+            super(new Http2PrefaceFW());
+        }
 
+        @Override
+        public Builder wrap(MutableDirectBuffer buffer, int offset, int maxLimit)
+        {
+            super.wrap(buffer, offset, maxLimit);
+            checkLimit(PRI_REQUEST.length, maxLimit);
+            buffer().putBytes(offset, PRI_REQUEST);
+            limit(offset + PRI_REQUEST.length);
+            return this;
+        }
+    }
+}

@@ -13,25 +13,17 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-package org.reaktivity.nukleus.http2.internal;
 
-import org.reaktivity.nukleus.Configuration;
-import org.reaktivity.nukleus.NukleusFactorySpi;
+package org.reaktivity.nukleus.http2.internal.client;
 
-public final class Http2NukleusFactorySpi implements NukleusFactorySpi
+public class Http2ClientStreamId
 {
-    public static final String NAME = "http2";
+    long nukleusStreamId;
+    int http2StreamId;
 
-    @Override
-    public String name()
+    public Http2ClientStreamId(long nukleusStreamId, int streamId)
     {
-        return Http2Nukleus.NAME;
-    }
-
-    @Override
-    public Http2Nukleus create(
-        Configuration config)
-    {
-        return new Http2Nukleus(new Http2Configuration(config));
+        this.nukleusStreamId = nukleusStreamId;
+        this.http2StreamId = streamId;
     }
 }

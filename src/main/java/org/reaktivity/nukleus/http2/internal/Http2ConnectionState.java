@@ -15,23 +15,13 @@
  */
 package org.reaktivity.nukleus.http2.internal;
 
-import org.reaktivity.nukleus.Configuration;
-import org.reaktivity.nukleus.NukleusFactorySpi;
-
-public final class Http2NukleusFactorySpi implements NukleusFactorySpi
+public enum Http2ConnectionState
 {
-    public static final String NAME = "http2";
-
-    @Override
-    public String name()
-    {
-        return Http2Nukleus.NAME;
-    }
-
-    @Override
-    public Http2Nukleus create(
-        Configuration config)
-    {
-        return new Http2Nukleus(new Http2Configuration(config));
-    }
+    IDLE,
+    RESERVED_LOCAL,
+    RESERVED_REMOTE,
+    OPEN,
+    HALF_CLOSED_LOCAL,
+    HALF_CLOSED_REMOTE,
+    CLOSED
 }
